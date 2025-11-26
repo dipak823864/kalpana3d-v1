@@ -1,6 +1,6 @@
 import numpy as np
 
-def export_obj(vertices, filename):
+def save_obj(vertices, filename):
     """
     Exports a list of vertices to an OBJ file.
     vertices: np.array of shape (N, 3)

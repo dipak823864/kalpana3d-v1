@@ -9,21 +9,21 @@ def sdSphere(p, r):
 @njit(fastmath=True)
 def sdBox(p, b):
     q = np.abs(p) - b
-    max_q_x = max(q[0], 0.0)
-    max_q_y = max(q[1], 0.0)
-    max_q_z = max(q[2], 0.0)
+    max_q_x = max(q[0], np.float32(0.0))
+    max_q_y = max(q[1], np.float32(0.0))
+    max_q_z = max(q[2], np.float32(0.0))
     len_max_q = np.sqrt(max_q_x*max_q_x + max_q_y*max_q_y + max_q_z*max_q_z)
-    inner = min(max(q[0], max(q[1], q[2])), 0.0)
+    inner = min(max(q[0], max(q[1], q[2])), np.float32(0.0))
     return len_max_q + inner
 
 @njit(fastmath=True)
 def sdCylinder(p, h, r):
     d_x = length(np.array([p[0], p[2]], dtype=np.float32)) - r
     d_y = np.abs(p[1]) - h
-    d_x_clamped = max(d_x, 0.0)
-    d_y_clamped = max(d_y, 0.0)
+    d_x_clamped = max(d_x, np.float32(0.0))
+    d_y_clamped = max(d_y, np.float32(0.0))
     dist_exterior = np.sqrt(d_x_clamped*d_x_clamped + d_y_clamped*d_y_clamped)
-    dist_interior = min(max(d_x, d_y), 0.0)
+    dist_interior = min(max(d_x, d_y), np.float32(0.0))
     return dist_exterior + dist_interior
 
 @njit(fastmath=True)
@@ -31,27 +31,20 @@ def sdCapsule(p, a, b, r):
     pa = p - a
     ba = b - a
     h = dot(pa, ba) / dot(ba, ba)
-    h = min(max(h, 0.0), 1.0)
+    h = min(max(h, np.float32(0.0)), np.float32(1.0))
     return length(pa - ba * h) - r
 
 @njit(fastmath=True)
 def sdRoundCone(p, a, b, r1, r2):
-    # a, b: start and end points
-    # r1, r2: start and end radii
     ba = b - a
     l2 = dot(ba, ba)
     rr = r1 - r2
     a2 = l2 - rr*rr
-    il2 = 1.0 / l2
+    il2 = np.float32(1.0) / l2
     
     pa = p - a
     y = dot(pa, ba)
     z = y - l2
-    
-    # x = length(pa*l2 - ba*y)
-    # This vector calculation might be unstable if l2 is small?
-    # pa*l2 - ba*y = pa*dot(ba,ba) - ba*dot(pa,ba) = cross(cross(ba, pa), ba) ?
-    # Let's stick to the formula
     
     v = pa * l2 - ba * y
     x2 = dot(v, v)
@@ -88,18 +81,28 @@ def opIntersection(d1, d2):
 
 @njit(fastmath=True)
 def opSmoothUnion(d1, d2, k):
-    h = max(k - abs(d1 - d2), 0.0) / k
-    return min(d1, d2) - h*h*k*(1.0/4.0)
+    val = np.float32(0.5) + np.float32(0.5) * (d2 - d1) / k
+    h = max(np.float32(0.0), min(np.float32(1.0), val))
+    return mix(d2, d1, h) - k * h * (np.float32(1.0) - h)
 
-# Space Folding / Modifiers
+@njit(fastmath=True)
+def opElongate(p, h):
+    q = np.abs(p) - h
+    qx = max(q[0], np.float32(0.0))
+    qy = max(q[1], np.float32(0.0))
+    qz = max(q[2], np.float32(0.0))
+    len_q = np.sqrt(qx*qx + qy*qy + qz*qz)
+    min_val = min(max(q[0], max(q[1], q[2])), np.float32(0.0))
+    return len_q + min_val
+
+@njit(fastmath=True)
+def opRound(p, r):
+    pass
 
 @njit(fastmath=True)
 def opTwist(p, k):
     c = np.cos(k * p[1])
     s = np.sin(k * p[1])
-    # Rotate xz
-    # [c -s]
-    # [s  c]
     qx = c * p[0] - s * p[2]
     qz = s * p[0] + c * p[2]
     return vec3(qx, p[1], qz)
@@ -108,16 +111,10 @@ def opTwist(p, k):
 def opBend(p, k):
     c = np.cos(k * p[0])
     s = np.sin(k * p[0])
-    # Rotate xy
     qx = c * p[0] - s * p[1]
     qy = s * p[0] + c * p[1]
     return vec3(qx, qy, p[2])
     
-# Taper is usually handled by the primitive (RoundCone), but generic taper:
 @njit(fastmath=True)
 def opTaper(p, k):
-    # Scale xz by y
-    # This is not distance preserving!
-    # But for small k it's okay.
-    # Or use RoundCone for exact distance.
-    return p # Placeholder, prefer RoundCone
+    return p

@@ -7,111 +7,43 @@ def load_scene(filename):
         
     scene_data = {}
     
-    # Spheres
-    if 'spheres' in data['scene']:
-        items = data['scene']['spheres']
-        count = len(items)
-        pos = np.zeros((count, 3), dtype=np.float32)
-        radii = np.zeros(count, dtype=np.float32)
-        
-        for i, item in enumerate(items):
-            pos[i] = item['p']
-            radii[i] = item['r']
-            
-        scene_data['spheres'] = {
-            'pos': pos,
-            'radius': radii,
-            'count': count
-        }
-    else:
-        scene_data['spheres'] = {'count': 0}
-        
-    # Capsules
-    if 'capsules' in data['scene']:
-        items = data['scene']['capsules']
-        count = len(items)
-        a = np.zeros((count, 3), dtype=np.float32)
-        b = np.zeros((count, 3), dtype=np.float32)
-        radii = np.zeros(count, dtype=np.float32)
-        
-        for i, item in enumerate(items):
-            a[i] = item['a']
-            b[i] = item['b']
-            radii[i] = item['r']
-            
-        scene_data['capsules'] = {
-            'a': a,
-            'b': b,
-            'radius': radii,
-            'count': count
-        }
-    else:
-        scene_data['capsules'] = {'count': 0}
-        
-    # Boxes
-    if 'boxes' in data['scene']:
-        items = data['scene']['boxes']
-        count = len(items)
-        pos = np.zeros((count, 3), dtype=np.float32)
-        dims = np.zeros((count, 3), dtype=np.float32)
-        
-        for i, item in enumerate(items):
-            pos[i] = item['p']
-            dims[i] = item['b']
-            
-        scene_data['boxes'] = {
-            'pos': pos,
-            'dims': dims,
-            'count': count
-        }
-    else:
-        scene_data['boxes'] = {'count': 0}
-        
-    # Round Cones (Tapered Capsules)
-    if 'round_cones' in data['scene']:
-        items = data['scene']['round_cones']
-        count = len(items)
-        a = np.zeros((count, 3), dtype=np.float32)
-        b = np.zeros((count, 3), dtype=np.float32)
-        r1 = np.zeros(count, dtype=np.float32)
-        r2 = np.zeros(count, dtype=np.float32)
-        
-        for i, item in enumerate(items):
-            a[i] = item['a']
-            b[i] = item['b']
-            r1[i] = item['r1']
-            r2[i] = item['r2']
-            
-        scene_data['round_cones'] = {
-            'a': a,
-            'b': b,
-            'r1': r1,
-            'r2': r2,
-            'count': count
-        }
-    else:
-        scene_data['round_cones'] = {'count': 0}
+    # Common fields to extract for each primitive type
+    primitive_fields = {
+        'spheres': {'pos': 'p', 'radius': 'r'},
+        'capsules': {'a': 'a', 'b': 'b', 'radius': 'r'},
+        'boxes': {'pos': 'p', 'dims': 'b'},
+        'round_cones': {'a': 'a', 'b': 'b', 'r1': 'r1', 'r2': 'r2'},
+        'torus': {'pos': 'p', 'r_main': 'r_main', 'r_tube': 'r_tube'}
+    }
 
-    # Torus
-    if 'torus' in data['scene']:
-        items = data['scene']['torus']
-        count = len(items)
-        pos = np.zeros((count, 3), dtype=np.float32)
-        r_main = np.zeros(count, dtype=np.float32)
-        r_tube = np.zeros(count, dtype=np.float32)
-        
-        for i, item in enumerate(items):
-            pos[i] = item['p']
-            r_main[i] = item['r_main']
-            r_tube[i] = item['r_tube']
+    for p_type, fields in primitive_fields.items():
+        if p_type in data.get('scene', {}):
+            items = data['scene'][p_type]
+            count = len(items)
             
-        scene_data['torus'] = {
-            'pos': pos,
-            'r_main': r_main,
-            'r_tube': r_tube,
-            'count': count
-        }
-    else:
-        scene_data['torus'] = {'count': 0}
-        
+            # Prepare data dictionaries
+            p_data = {'count': count}
+            for key in fields.keys():
+                p_data[key] = np.zeros((count, 3) if key in ['pos', 'dims', 'a', 'b'] else count, dtype=np.float32)
+            
+            p_data['translate'] = np.zeros((count, 3), dtype=np.float32)
+            p_data['rotate'] = np.zeros((count, 3), dtype=np.float32)
+            p_data['scale'] = np.ones(count, dtype=np.float32) # Default scale is 1
+
+            for i, item in enumerate(items):
+                for key, yaml_key in fields.items():
+                    if key in ['pos', 'dims', 'a', 'b']:
+                        p_data[key][i] = item[yaml_key]
+                    else:
+                        p_data[key][i] = item[yaml_key]
+
+                # Transformations
+                p_data['translate'][i] = item.get('translate', [0,0,0])
+                p_data['rotate'][i] = item.get('rotate', [0,0,0])
+                p_data['scale'][i] = item.get('scale', 1.0)
+
+            scene_data[p_type] = p_data
+        else:
+            scene_data[p_type] = {'count': 0}
+            
     return scene_data

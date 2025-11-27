@@ -3,7 +3,8 @@ from numba import njit
 from kalpana3d.parser import load_scene
 from kalpana3d.sdf import sdCapsule, sdBox, opSmoothUnion
 from kalpana3d.noise import domain_warp, fbm
-from kalpana3d.render import render_image
+from kalpana3d.mesher import compute_mesh_counts, generate_mesh
+from kalpana3d.export import save_obj
 from kalpana3d.math_core import vec3
 
 def create_sdf_function(capsules_data, boxes_data, settings, perm):
@@ -18,7 +19,7 @@ def create_sdf_function(capsules_data, boxes_data, settings, perm):
     boxes_dims = boxes_data.get('dims', np.empty((0,3), dtype=np.float32))
     boxes_translate = boxes_data.get('translate', np.empty((0,3), dtype=np.float32))
     boxes_count = boxes_data.get('count', 0)
-    
+
     noise_octaves = settings['noise_octaves']
     noise_amplitude = np.float32(settings['noise_amplitude'])
     smooth_union_k = np.float32(settings['smooth_union_k'])
@@ -54,20 +55,18 @@ if __name__ == '__main__':
         import yaml
         yaml_data = yaml.safe_load(f)
         settings = yaml_data['settings']
-    
+
     perm = np.random.permutation(256).astype(np.int32)
     perm = np.concatenate((perm, perm))
 
-
-    # Create the Numba-jitted SDF function
     sdf_func = create_sdf_function(scene_data['capsules'], scene_data['boxes'], settings, perm)
 
-    # --- Render Full Shot ---
-    ro_full = vec3(4.0, 2.0, 4.0).astype(np.float32)
-    lookat_full = vec3(0, 0.5, 0).astype(np.float32)
-    render_image(1024, 768, ro_full, lookat_full, 45.0, sdf_func, 'gallery/images/twisted_creature_full.png')
+    min_bound = vec3(-3, -3, -3)
+    max_bound = vec3(3, 3, 3)
+    resolution = vec3(128, 128, 128)
+    iso_level = 0.0
 
-    # --- Render Detail Shot ---
-    ro_detail = vec3(1.5, 1.0, 1.5).astype(np.float32)
-    lookat_detail = vec3(0, 0.8, -0.5).astype(np.float32)
-    render_image(1024, 768, ro_detail, lookat_detail, 30.0, sdf_func, 'gallery/images/twisted_creature_detail.png')
+    max_triangles = compute_mesh_counts(min_bound, max_bound, resolution, sdf_func, iso_level)
+    vertices = generate_mesh(min_bound, max_bound, resolution, sdf_func, iso_level, max_triangles)
+
+    save_obj(vertices, 'gallery/models/twisted_creature.obj')

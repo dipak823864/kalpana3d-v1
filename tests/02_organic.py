@@ -10,7 +10,7 @@ from kalpana3d.sdf import sdSphere, opSmoothUnion
 from kalpana3d.noise import fbm
 from kalpana3d.render import render_image
 
-def create_sdf_func(perm):
+def create_scene_sdf(perm):
     @njit(fastmath=True)
     def scene_sdf(p):
         # Two spheres
@@ -32,15 +32,18 @@ def create_sdf_func(perm):
     return scene_sdf
 
 def main():
-    perm = np.random.permutation(256).astype(np.int32)
-    perm = np.concatenate((perm, perm))
-    scene_sdf = create_sdf_func(perm)
     width = 640
     height = 480
     ro = vec3(0.0, 0.0, 4.0)
     lookat = vec3(0.0, 0.0, 0.0)
     fov = 60.0
     
+    # Generate permutation table
+    perm = np.random.permutation(256).astype(np.int32)
+    perm = np.concatenate((perm, perm))
+
+    scene_sdf = create_scene_sdf(perm)
+
     output_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '../gallery/images/02_organic.png'))
     
     print("Rendering Phase 2: Organic Shapes...")

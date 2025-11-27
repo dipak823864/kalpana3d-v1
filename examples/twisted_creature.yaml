@@ -51,5 +51,5 @@ scene:
 # Global scene settings that the runner script will use
 settings:
   noise_octaves: 4
-  noise_amplitude: 0.05
+  noise_amplitude: 0.02
   smooth_union_k: 0.3

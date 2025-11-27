@@ -104,21 +104,22 @@ def compute_mesh_counts(min_bound, max_bound, resolution, sdf_func, iso_level):
                 
                 # Let's evaluate.
                 vals = np.empty(8, dtype=np.float32)
-                # 0
+                # Bourke's vertex ordering
+                # 0: 0,0,0
+                # 1: 1,0,0
+                # 2: 1,1,0
+                # 3: 0,1,0
+                # 4: 0,0,1
+                # 5: 1,0,1
+                # 6: 1,1,1
+                # 7: 0,1,1
                 vals[0] = sdf_func(pos + vec3(0,0,0)*step)
-                # 1
                 vals[1] = sdf_func(pos + vec3(1,0,0)*step)
-                # 2
-                vals[2] = sdf_func(pos + vec3(1,0,1)*step)
-                # 3
-                vals[3] = sdf_func(pos + vec3(0,0,1)*step)
-                # 4
-                vals[4] = sdf_func(pos + vec3(0,1,0)*step)
-                # 5
-                vals[5] = sdf_func(pos + vec3(1,1,0)*step)
-                # 6
+                vals[2] = sdf_func(pos + vec3(1,1,0)*step)
+                vals[3] = sdf_func(pos + vec3(0,1,0)*step)
+                vals[4] = sdf_func(pos + vec3(0,0,1)*step)
+                vals[5] = sdf_func(pos + vec3(1,0,1)*step)
                 vals[6] = sdf_func(pos + vec3(1,1,1)*step)
-                # 7
                 vals[7] = sdf_func(pos + vec3(0,1,1)*step)
                 
                 if vals[0] < iso_level: cube_index |= 1
@@ -178,8 +179,8 @@ def generate_mesh(min_bound, max_bound, resolution, sdf_func, iso_level, max_tri
                 
                 # Offsets for Bourke's ordering
                 offsets = np.array([
-                    [0,0,0], [1,0,0], [1,0,1], [0,0,1],
-                    [0,1,0], [1,1,0], [1,1,1], [0,1,1]
+                    [0,0,0], [1,0,0], [1,1,0], [0,1,0],
+                    [0,0,1], [1,0,1], [1,1,1], [0,1,1]
                 ], dtype=np.float32)
                 
                 cube_index = 0

@@ -4,9 +4,9 @@ from numba import njit
 @njit(fastmath=True)
 def vec3(x, y, z):
     a = np.empty(3, dtype=np.float32)
-    a[0] = x
-    a[1] = y
-    a[2] = z
+    a[0] = np.float32(x)
+    a[1] = np.float32(y)
+    a[2] = np.float32(z)
     return a
 
 @njit(fastmath=True)
@@ -21,12 +21,8 @@ def length(v):
 def normalize(v):
     l = length(v)
     if l < 1e-8:
-        a = np.empty(3, dtype=np.float32)
-        a[0] = 0.0
-        a[1] = 0.0
-        a[2] = 0.0
-        return a
-    return (v / l).astype(np.float32)
+        return vec3(0.0, 0.0, 0.0)
+    return v / l
 
 @njit(fastmath=True)
 def cross(a, b):

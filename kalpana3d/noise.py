@@ -13,7 +13,8 @@ def fade(t):
 def grad(hash_val, x, y, z):
     h = hash_val & 15
     u = x if h < 8 else y
-    v = y if h < 4 else (x if h in (12, 14) else z)
+    # Fix: Avoid tuple membership check 'h in (12, 14)' for Numba compatibility
+    v = y if h < 4 else (x if (h == 12 or h == 14) else z)
     
     res = 0.0
     if h & 1:

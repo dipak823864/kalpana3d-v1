@@ -19,35 +19,40 @@ def get_camera_ray(uv, ro, lookat, fov):
 
 @njit(fastmath=True)
 def calc_normal(p, sdf_func):
-    eps = np.float32(0.0001)
+    eps = np.float32(0.0005)
     x = np.float32(sdf_func(p + vec3(eps, 0.0, 0.0))) - np.float32(sdf_func(p - vec3(eps, 0.0, 0.0)))
     y = np.float32(sdf_func(p + vec3(0.0, eps, 0.0))) - np.float32(sdf_func(p - vec3(0.0, eps, 0.0)))
     z = np.float32(sdf_func(p + vec3(0.0, 0.0, eps))) - np.float32(sdf_func(p - vec3(0.0, 0.0, eps)))
-    return normalize(vec3(x, y, z))
+    n = vec3(x, y, z)
+    l = dot(n, n)
+    if l == 0.0:
+        return vec3(0.0, 1.0, 0.0)
+    return normalize(n)
 
 @njit(fastmath=True)
-def ray_march(ro, rd, sdf_func):
+def ray_march(ro, rd, sdf_func, step_scale):
     dO = np.float32(0.0)
-    for i in range(256):
+    # Increased iterations for conservative stepping
+    for i in range(1000):
         p = ro + rd * dO
         dS = np.float32(sdf_func(p))
-        if dS < 0.001:
+        if abs(dS) < 0.0005:
             return dO
         if dO > 100.0:
             break
-        dO += dS
+        dO += dS * step_scale
     return np.float32(100.0)
 
 @njit(fastmath=True)
-def calc_soft_shadow(ro, rd, sdf_func, k):
+def calc_soft_shadow(ro, rd, sdf_func, k, step_scale):
     res = np.float32(1.0)
-    t = np.float32(0.01)
-    for i in range(64):
+    t = np.float32(0.05) # Increased bias
+    for i in range(256):
         h = np.float32(sdf_func(ro + rd * t))
         if h < 0.001:
             return np.float32(0.0)
         res = min(res, k * h / t)
-        t += h
+        t += h * step_scale
         if t > 50.0:
             break
     return res
@@ -64,7 +69,7 @@ def calc_ao(p, n, sdf_func):
     return np.float32(1.0) - max(np.float32(0.0), min(np.float32(1.0), val))
 
 @njit(fastmath=True, parallel=True)
-def render_kernel(width, height, ro, lookat, fov, sdf_func, output_buffer):
+def render_kernel(width, height, ro, lookat, fov, sdf_func, output_buffer, step_scale):
     for y in prange(height):
         for x in range(width):
             uv_y = -((np.float32(y) / np.float32(height)) * np.float32(2.0) - np.float32(1.0))
@@ -74,7 +79,7 @@ def render_kernel(width, height, ro, lookat, fov, sdf_func, output_buffer):
             
             rd = get_camera_ray(uv, ro, lookat, fov)
             
-            d = ray_march(ro, rd, sdf_func)
+            d = ray_march(ro, rd, sdf_func, step_scale)
             
             col = vec3(0.1, 0.1, 0.15)
             
@@ -85,7 +90,7 @@ def render_kernel(width, height, ro, lookat, fov, sdf_func, output_buffer):
                 light_pos = vec3(2.0, 4.0, 3.0)
                 l = normalize(light_pos - p)
                 
-                shadow = calc_soft_shadow(p + n * np.float32(0.001), l, sdf_func, np.float32(16.0))
+                shadow = calc_soft_shadow(p + n * np.float32(0.01), l, sdf_func, np.float32(16.0), step_scale)
 
                 diff = max(dot(n, l), np.float32(0.0))
                 ambient = np.float32(0.1)
@@ -107,9 +112,9 @@ def render_kernel(width, height, ro, lookat, fov, sdf_func, output_buffer):
             output_buffer[y, x, 1] = col[1]
             output_buffer[y, x, 2] = col[2]
 
-def render_image(width, height, ro, lookat, fov, sdf_func, filename):
+def render_image(width, height, ro, lookat, fov, sdf_func, filename, step_scale=0.5):
     output_buffer = np.zeros((height, width, 3), dtype=np.float32)
-    render_kernel(width, height, ro, lookat, fov, sdf_func, output_buffer)
+    render_kernel(width, height, ro, lookat, fov, sdf_func, output_buffer, np.float32(step_scale))
     img_data = (output_buffer * 255).astype(np.uint8)
     img = Image.fromarray(img_data)
     img.save(filename)

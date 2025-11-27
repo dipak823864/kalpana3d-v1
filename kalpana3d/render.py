@@ -13,7 +13,8 @@ def get_camera_ray(uv, ro, lookat, fov):
     zoom = np.float32(1.0) / np.tan(np.radians(np.float32(fov)) / np.float32(2.0))
     
     c = ro + f * zoom
-    i = c + uv[0] * r + uv[1] * u
+    # Ensure uv elements are explicitly float32 to avoid type promotion
+    i = c + np.float32(uv[0]) * r + np.float32(uv[1]) * u
     rd = normalize(i - ro)
     return rd
 
@@ -28,14 +29,17 @@ def calc_normal(p, sdf_func):
 @njit(fastmath=True)
 def ray_march(ro, rd, sdf_func):
     dO = np.float32(0.0)
+    # Safe marching factor to prevent overshooting on warped/noisy SDFs
+    step_factor = np.float32(0.6)
     for i in range(256):
-        p = ro + rd * dO
+        # Ensure dO is treated as float32 in calculation to match ro/rd
+        p = ro + rd * np.float32(dO)
         dS = sdf_func(p)
         if dS < 0.001:
             return dO
         if dO > 100.0:
             break
-        dO += dS
+        dO += np.float32(dS) * step_factor
     return np.float32(100.0)
 
 @njit(fastmath=True)
@@ -43,11 +47,12 @@ def calc_soft_shadow(ro, rd, sdf_func, k):
     res = np.float32(1.0)
     t = np.float32(0.01)
     for i in range(64):
-        h = sdf_func(ro + rd * t)
+        # Ensure t is float32
+        h = sdf_func(ro + rd * np.float32(t))
         if h < 0.001:
             return np.float32(0.0)
         res = min(res, k * h / t)
-        t += h
+        t += np.float32(h)
         if t > 50.0:
             break
     return res
@@ -76,7 +81,7 @@ def render_kernel(width, height, ro, lookat, fov, sdf_func, output_buffer):
             
             d = ray_march(ro, rd, sdf_func)
             
-            col = vec3(0.1, 0.1, 0.15)
+            col = vec3(0.1, 0.1, 0.15).astype(np.float32)
             
             if d < 100.0:
                 p = ro + rd * d
@@ -95,7 +100,8 @@ def render_kernel(width, height, ro, lookat, fov, sdf_func, output_buffer):
                 mat_col = vec3(1.0, 1.0, 1.0)
                 
                 final_col = mat_col * (diff * shadow + ambient * ao)
-                col = final_col
+                # Ensure final_col remains float32
+                col = final_col.astype(np.float32)
             
             f0 = np.float32(0.0)
             f1 = np.float32(1.0)

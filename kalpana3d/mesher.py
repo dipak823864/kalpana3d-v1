@@ -22,139 +22,42 @@ def vertex_interp(iso_level, p1, p2, val1, val2):
 
 @njit(fastmath=True)
 def compute_mesh_counts(min_bound, max_bound, resolution, sdf_func, iso_level):
-    # Pass 1: Count vertices
-    # resolution is (res_x, res_y, res_z)
-    
     step = (max_bound - min_bound) / resolution
-    
     count = 0
-    
-    # We iterate through the grid
-    # For Numba parallel, we can try to parallelize the outer loop
-    # But reduction (count) is tricky in parallel without race conditions or atomics (which are slow/limited)
-    # So we might do this serially or use an array to sum up.
-    # Let's do serial for safety first, or use a reduction array.
-    
     res_x = int(resolution[0])
     res_y = int(resolution[1])
     res_z = int(resolution[2])
     
-    # Pre-allocate grid values? No, too much memory if large.
-    # Evaluate on the fly.
-    
-    # Optimization: We can't evaluate 8 corners for every cell, that's redundant.
-    # But for simplicity in Phase 3, let's evaluate per cell.
-    # To optimize, we would cache layers.
-    
-    # Let's just do it per cell for now.
-    
+    # Offsets for Sebastian Lague's ordering
+    offsets = np.array([
+        [0,0,0], [1,0,0], [1,1,0], [0,1,0],
+        [0,0,1], [1,0,1], [1,1,1], [0,1,1]
+    ], dtype=np.float32)
+
     for x in range(res_x):
         for y in range(res_y):
             for z in range(res_z):
-                # Calculate position of corner 0
                 pos = min_bound + vec3(x, y, z) * step
                 
-                # We need values at 8 corners
-                # 0: x, y, z
-                # 1: x+1, y, z
-                # ...
-                # This is very expensive to re-evaluate.
-                # But let's stick to the plan.
-                
-                # Actually, let's implement a simple caching strategy?
-                # No, let's trust the CPU speed for now.
-                
-                # Determine cube index
                 cube_index = 0
+                for i in range(8):
+                    val = sdf_func(pos + offsets[i] * step)
+                    if val < iso_level:
+                        cube_index |= (1 << i)
                 
-                # Corner positions relative to cell
-                # 0: 0,0,0
-                # 1: 1,0,0
-                # 2: 1,0,1
-                # 3: 0,0,1
-                # 4: 0,1,0
-                # 5: 1,1,0
-                # 6: 1,1,1
-                # 7: 0,1,1
-                
-                # Wait, standard MC indexing:
-                # 0: 0,0,0
-                # 1: 1,0,0
-                # 2: 1,1,0
-                # 3: 0,1,0
-                # 4: 0,0,1
-                # 5: 1,0,1
-                # 6: 1,1,1
-                # 7: 0,1,1
-                # Check Paul Bourke's indexing.
-                # 0: x, y, z
-                # 1: x+1, y, z
-                # 2: x+1, y, z+1  <-- Wait.
-                # Bourke:
-                # 0: 0,0,0
-                # 1: 1,0,0
-                # 2: 1,0,1
-                # 3: 0,0,1
-                # 4: 0,1,0
-                # 5: 1,1,0
-                # 6: 1,1,1
-                # 7: 0,1,1
-                
-                # My edge table assumes Bourke's.
-                
-                # Let's evaluate.
-                vals = np.empty(8, dtype=np.float32)
-                # 0
-                vals[0] = sdf_func(pos + vec3(0,0,0)*step)
-                # 1
-                vals[1] = sdf_func(pos + vec3(1,0,0)*step)
-                # 2
-                vals[2] = sdf_func(pos + vec3(1,0,1)*step)
-                # 3
-                vals[3] = sdf_func(pos + vec3(0,0,1)*step)
-                # 4
-                vals[4] = sdf_func(pos + vec3(0,1,0)*step)
-                # 5
-                vals[5] = sdf_func(pos + vec3(1,1,0)*step)
-                # 6
-                vals[6] = sdf_func(pos + vec3(1,1,1)*step)
-                # 7
-                vals[7] = sdf_func(pos + vec3(0,1,1)*step)
-                
-                if vals[0] < iso_level: cube_index |= 1
-                if vals[1] < iso_level: cube_index |= 2
-                if vals[2] < iso_level: cube_index |= 4
-                if vals[3] < iso_level: cube_index |= 8
-                if vals[4] < iso_level: cube_index |= 16
-                if vals[5] < iso_level: cube_index |= 32
-                if vals[6] < iso_level: cube_index |= 64
-                if vals[7] < iso_level: cube_index |= 128
-                
-                # Look up edges
                 edges = edge_table[cube_index]
                 if edges == 0:
                     continue
                 
-                # Count triangles
-                # Tri table has -1 terminator
                 for i in range(0, 16, 3):
                     if tri_table[cube_index, i] == -1:
                         break
                     count += 1
-                    
     return count
 
-@njit(fastmath=True)
+@njit # Fastmath disabled as requested
 def generate_mesh(min_bound, max_bound, resolution, sdf_func, iso_level, max_triangles):
-    # Pass 2: Generate geometry
-    
-    # Output arrays
-    # Vertices: (max_triangles * 3, 3)
-    # We will output unindexed triangles (flat shading ready)
-    # Or we can try to weld them later. For now, just raw triangles.
-    
     vertices = np.empty((max_triangles * 3, 3), dtype=np.float32)
-    normals = np.empty((max_triangles * 3, 3), dtype=np.float32) # Optional
     
     step = (max_bound - min_bound) / resolution
     res_x = int(resolution[0])
@@ -163,6 +66,12 @@ def generate_mesh(min_bound, max_bound, resolution, sdf_func, iso_level, max_tri
     
     tri_idx = 0
     
+    # Offsets for Sebastian Lague's ordering
+    offsets = np.array([
+        [0,0,0], [1,0,0], [1,1,0], [0,1,0],
+        [0,0,1], [1,0,1], [1,1,1], [0,1,1]
+    ], dtype=np.float32)
+
     for x in range(res_x):
         for y in range(res_y):
             for z in range(res_z):
@@ -171,16 +80,8 @@ def generate_mesh(min_bound, max_bound, resolution, sdf_func, iso_level, max_tri
                 
                 pos = min_bound + vec3(x, y, z) * step
                 
-                # Evaluate 8 corners
-                # Optimization: In a real engine, we would cache these.
                 p = np.empty((8, 3), dtype=np.float32)
                 val = np.empty(8, dtype=np.float32)
-                
-                # Offsets for Bourke's ordering
-                offsets = np.array([
-                    [0,0,0], [1,0,0], [1,0,1], [0,0,1],
-                    [0,1,0], [1,1,0], [1,1,1], [0,1,1]
-                ], dtype=np.float32)
                 
                 cube_index = 0
                 for i in range(8):
@@ -193,6 +94,20 @@ def generate_mesh(min_bound, max_bound, resolution, sdf_func, iso_level, max_tri
                     continue
                 
                 # Compute vertices on edges
+                # Edge connections based on Lague's convention (inferred from his Compute Shader):
+                # Edge 0: 0->1
+                # Edge 1: 1->2
+                # Edge 2: 2->3
+                # Edge 3: 3->0
+                # Edge 4: 4->5
+                # Edge 5: 5->6
+                # Edge 6: 6->7
+                # Edge 7: 7->4
+                # Edge 8: 0->4
+                # Edge 9: 1->5
+                # Edge 10: 2->6
+                # Edge 11: 3->7
+
                 vert_list = np.empty((12, 3), dtype=np.float32)
                 
                 if edge_table[cube_index] & 1:
@@ -228,12 +143,10 @@ def generate_mesh(min_bound, max_bound, resolution, sdf_func, iso_level, max_tri
                     if tri_idx >= max_triangles:
                         break
                         
-                    # Get vertices
                     v1 = vert_list[tri_table[cube_index, i]]
                     v2 = vert_list[tri_table[cube_index, i+1]]
                     v3 = vert_list[tri_table[cube_index, i+2]]
                     
-                    # Store
                     vertices[tri_idx*3 + 0] = v1
                     vertices[tri_idx*3 + 1] = v2
                     vertices[tri_idx*3 + 2] = v3

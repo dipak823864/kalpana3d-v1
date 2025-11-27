@@ -20,9 +20,9 @@ def get_camera_ray(uv, ro, lookat, fov):
 @njit(fastmath=True)
 def calc_normal(p, sdf_func):
     eps = np.float32(0.0001)
-    x = sdf_func(p + vec3(eps, 0.0, 0.0)) - sdf_func(p - vec3(eps, 0.0, 0.0))
-    y = sdf_func(p + vec3(0.0, eps, 0.0)) - sdf_func(p - vec3(0.0, eps, 0.0))
-    z = sdf_func(p + vec3(0.0, 0.0, eps)) - sdf_func(p - vec3(0.0, 0.0, eps))
+    x = np.float32(sdf_func(p + vec3(eps, 0.0, 0.0))) - np.float32(sdf_func(p - vec3(eps, 0.0, 0.0)))
+    y = np.float32(sdf_func(p + vec3(0.0, eps, 0.0))) - np.float32(sdf_func(p - vec3(0.0, eps, 0.0)))
+    z = np.float32(sdf_func(p + vec3(0.0, 0.0, eps))) - np.float32(sdf_func(p - vec3(0.0, 0.0, eps)))
     return normalize(vec3(x, y, z))
 
 @njit(fastmath=True)
@@ -30,7 +30,7 @@ def ray_march(ro, rd, sdf_func):
     dO = np.float32(0.0)
     for i in range(256):
         p = ro + rd * dO
-        dS = sdf_func(p)
+        dS = np.float32(sdf_func(p))
         if dS < 0.001:
             return dO
         if dO > 100.0:
@@ -43,7 +43,7 @@ def calc_soft_shadow(ro, rd, sdf_func, k):
     res = np.float32(1.0)
     t = np.float32(0.01)
     for i in range(64):
-        h = sdf_func(ro + rd * t)
+        h = np.float32(sdf_func(ro + rd * t))
         if h < 0.001:
             return np.float32(0.0)
         res = min(res, k * h / t)
@@ -58,7 +58,7 @@ def calc_ao(p, n, sdf_func):
     w = np.float32(1.0)
     for i in range(1, 6):
         d = np.float32(i * 0.1)
-        occ += (d - sdf_func(p + n * d)) * w
+        occ += (d - np.float32(sdf_func(p + n * d))) * w
         w *= np.float32(0.5)
     val = occ
     return np.float32(1.0) - max(np.float32(0.0), min(np.float32(1.0), val))

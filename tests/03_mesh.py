@@ -10,7 +10,11 @@ from kalpana3d.math_core import vec3
 from kalpana3d.sdf import sdSphere, opSmoothUnion
 from kalpana3d.noise import fbm
 from kalpana3d.mesher import generate_mesh, compute_mesh_counts
-from kalpana3d.export import export_obj
+from kalpana3d.export import save_obj as export_obj
+
+# Create permutation table
+perm = np.random.permutation(256).astype(np.int32)
+perm = np.concatenate((perm, perm))
 
 @njit(fastmath=True)
 def scene_sdf(p):
@@ -18,7 +22,7 @@ def scene_sdf(p):
     s1 = sdSphere(p - vec3(-0.8, 0.0, 0.0), 1.0)
     s2 = sdSphere(p - vec3(0.8, 0.0, 0.0), 0.8)
     d = opSmoothUnion(s1, s2, 0.5)
-    n = fbm(p * 2.0, 3)
+    n = fbm(p * 2.0, 3, perm)
     d += n * 0.1
     return d
 
